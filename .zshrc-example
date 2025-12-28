@@ -1,0 +1,212 @@
+# =======================
+# ~/.zshrc (Enhanced Configuration)
+# =======================
+
+# ----- PATH basics -----
+# Add user's private bin to PATH for custom scripts
+export PATH="$HOME/bin:$PATH"
+
+# ----- History Configuration -----
+# Store all command history persistently with timestamps
+HISTFILE="$HOME/.zsh_history"
+HISTSIZE=500000                 # Maximum events in memory
+SAVEHIST=500000                 # Maximum events in history file
+
+# History behavior options
+setopt APPEND_HISTORY           # Append to history file, don't overwrite
+setopt INC_APPEND_HISTORY       # Write commands immediately as entered
+setopt SHARE_HISTORY            # Share history across all shell sessions
+setopt EXTENDED_HISTORY         # Store timestamps (: EPOCH:elapsed;cmd)
+
+# History deduplication and hygiene
+setopt HIST_IGNORE_SPACE        # Ignore commands starting with a space
+setopt HIST_REDUCE_BLANKS       # Remove superfluous blanks from history
+setopt HIST_SAVE_NO_DUPS        # Don't save duplicate consecutive entries
+setopt HIST_IGNORE_ALL_DUPS     # Remove older duplicate entries from history
+setopt HIST_FIND_NO_DUPS        # Don't display duplicates when searching
+setopt HIST_EXPIRE_DUPS_FIRST   # Expire duplicate entries first when trimming
+
+## OPT:
+setopt HIST_FCNTL_LOCK
+setopt HIST_VERIFY
+
+# History display format for built-in `history`/`fc -l` commands
+HIST_STAMPS="yyyy-mm-dd"
+
+
+# ----- Terminal Behavior -----
+# Disable annoying terminal bell on errors
+setopt NO_BEEP
+
+# ----- Line Editing & Key Bindings -----
+# Use emacs-style key bindings (change to `bindkey -v` for vi mode)
+bindkey -e
+# Allow comments in interactive shell (lines starting with #)
+setopt INTERACTIVE_COMMENTS
+
+# Word navigation with Ctrl+Arrow keys
+# Ctrl+Right Arrow: jump forward one word
+       bindkey '^[[1;5C' forward-word
+#       # Ctrl+Left Arrow: jump backward one word
+       bindkey '^[[1;5D' backward-word
+#       
+#       # Alternative bindings for different terminal emulators
+#       bindkey '^[OC' forward-word     # Some terminals
+#       bindkey '^[OD' backward-word    # Some terminals
+#       bindkey '^[[C' forward-word     # rxvt
+#       bindkey '^[[D' backward-word    # rxvt
+#       
+#       # Home and End keys
+#       bindkey '^[[H' beginning-of-line
+#       bindkey '^[[F' end-of-line
+#       
+#       # Delete key
+#       bindkey '^[[3~' delete-char
+
+# ----- Completion System -----
+# Initialize zsh completion system for tab completion
+autoload -Uz compinit
+zmodload zsh/complist
+compinit -C
+
+# Completion behavior
+setopt AUTO_MENU                # Show completion menu on successive tab presses
+setopt AUTO_LIST                # Automatically list choices on ambiguous completion
+setopt LIST_AMBIGUOUS           # Complete up to ambiguous prefix
+
+# Interactive completion menu with arrow key navigation
+zstyle ':completion:*' menu select
+
+# Colorize completion lists using LS_COLORS
+if command -v dircolors >/dev/null 2>&1; then
+  eval "$(dircolors -b)"
+fi
+# Apply colors to completion menu if LS_COLORS is set
+if [[ -n "${LS_COLORS:-}" ]]; then
+  zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
+fi
+
+# ----- Environment Variables -----
+# Less pager: enable raw control characters for colors
+export LESS='-R'
+# Remove stale ripgrep config to avoid errors
+unset RIPGREP_CONFIG_PATH
+
+# ----- Prompt Configuration -----
+# Load colors module for prompt customization
+autoload -Uz colors && colors
+# Two-line prompt: user@host and current directory, then $ on next line
+PROMPT='%F{blue}%n@%m%f %F{cyan}%~%f'$'\n''$ '
+# Enable prompt parameter expansion, command substitution, and arithmetic expansion
+setopt PROMPT_SUBST
+
+# ===== Enhanced Ctrl-R: History Search with FZF =====
+# Interactive history search with fuzzy finding and regex support
+# - Shows all unique commands (duplicates removed)
+# - Newest entries first
+# - Supports regex patterns (enable with Alt+R in fzf)
+# - Live filtering as you type
+fzf-history-widget() {
+  if command -v fzf >/dev/null 2>&1; then
+    local selected
+    # Extract history, strip line numbers/timestamps, remove duplicates, reverse for newest-first
+    selected=$(
+      fc -rl 1 \
+      | sed 's/^[[:space:]]*[0-9]\+[[:space:]]*//' \
+      | awk '!seen[$0]++' \
+      | fzf --height=80% \
+            --reverse \
+            --prompt='history> ' \
+            --bind 'enter:accept,tab:toggle+down,alt-r:toggle-search' \
+            --bind 'ctrl-/:toggle-preview' \
+            --preview 'echo {}' \
+            --preview-window 'down:3:wrap' \
+            --color 'prompt:#00ff00,pointer:#ff00ff' \
+            --no-sort \
+            --exact
+    )
+    # Insert selected command into current line
+    [[ -n "$selected" ]] && LBUFFER="$selected"
+    zle redisplay
+  else
+    # Fallback to built-in history search if fzf not available
+    zle history-incremental-search-backward
+  fi
+}
+# Register the function as a zsh line editor widget
+zle -N fzf-history-widget
+# Bind Ctrl+R to the enhanced history search
+bindkey '^R' fzf-history-widget
+
+# ===== Utility Functions =====
+# hh: Pretty-print history with timestamps
+# Output format: command_num<TAB>DD-MM-YYYY-HH-MM-SS<TAB>COMMAND
+# Usage: hh | grep <pattern>
+hh() {
+  local date_cmd="date"
+  # Use GNU date if available (for macOS compatibility)
+  if command -v gdate >/dev/null 2>&1; then
+    date_cmd="gdate"
+  fi
+  # Parse EXTENDED_HISTORY format (: EPOCH:elapsed;command)
+  awk -F';' -v OFS='\t' '
+    BEGIN { cmdnum=0 }
+    /^: [0-9]+:[0-9]+;/ {
+      split($1,hdr,": ");  # hdr[2] = "EPOCH:elapsed"
+      split(hdr[2],t,":"); # t[1]=EPOCH
+      cmd=$2
+      cmdnum++
+      print cmdnum, t[1], cmd
+    }
+  ' "$HISTFILE" | while IFS=$'\t' read -r num epoch cmd; do
+    # Convert epoch timestamp to human-readable date
+    printf "%s\t%s\t%s\n" "$num" "$($date_cmd -d "@$epoch" +'%d-%m-%Y-%H-%M-%S' 2>/dev/null)" "$cmd"
+  done
+}
+
+# --------------------------------------------------- #
+# -----------------  Customization  ----------------- #
+# --------------------------------------------------- #
+
+# ----- Python Environment Management (pyenv) -----
+# Add pyenv to PATH and initialize
+export PATH="$HOME/.pyenv/bin:$PATH"
+eval "$(pyenv init --path)"
+eval "$(pyenv init -)"
+eval "$(pyenv virtualenv-init -)"
+# Set default Python for pipx
+export PIPX_DEFAULT_PYTHON="$HOME/.pyenv/versions/3.13.5/bin/python"
+
+# ----- Terraform Configuration -----
+# Enable bash-style completion for Terraform
+autoload -U +X bashcompinit && bashcompinit
+complete -o nospace -C /usr/bin/terraform terraform
+
+# ----- Colorized Command Output -----
+# Enable colors for ls command
+alias ls='ls --color=auto'
+# Enable colors for grep command
+alias grep='grep --color=auto'
+
+# ----- Java & Maven (commented out - uncomment if needed) -----
+# export JAVA_HOME=/opt/jdk-21
+# export M2_HOME=/opt/maven-3.9.11
+# export PATH="$JAVA_HOME/bin:$M2_HOME/bin:$PATH"
+
+# ----- Maven -----
+# Add Maven to PATH
+export PATH="/opt/maven-3.9.11/bin/:$PATH"
+
+# ===== Additional Useful Aliases =====
+# Uncomment and customize as needed:
+# alias ll='ls -lah'              # Long format with hidden files
+# alias la='ls -A'                # All files except . and ..
+# alias l='ls -CF'                # Column output with file type indicators
+# alias ..='cd ..'                # Go up one directory
+# alias ...='cd ../..'            # Go up two directories
+# alias h='history'               # Shorthand for history
+# alias c='clear'                 # Clear terminal screen
+
+
+# Clear deprecated GREP_OPTIONS variable
+# export GREP_OPTIONS=
