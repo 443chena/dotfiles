@@ -82,3 +82,63 @@ graphviz \
 d2 \
 ca-certificates
 
+---
+
+~/.config/Code/User/keybindings.json 
+// Place your key bindings in this file to override the defaults
+[
+    {
+    "key": "Alt+Shift+t",
+    "command": "editor.action.insertSnippet",
+    "args": {
+      "snippet": "[[time-log-$CURRENT_YEAR-$CURRENT_MONTH-$CURRENT_DATE]] $CURRENT_HOUR:$CURRENT_MINUTE\n"
+    },
+    "when": "editorTextFocus"
+  }
+
+  // Remove default Alt+Arrow passthrough (fixes ;5C / ;5D issue)
+  {
+    "key": "alt+right",
+    "command": "-",
+    "when": "terminalFocus"
+  },
+  {
+    "key": "alt+left",
+    "command": "-",
+    "when": "terminalFocus"
+  },P
+
+
+
+//  {
+//  "key": "alt+right",
+//  "command": "workbench.action.terminal.focusNextPane",
+//  "when": "terminalFocus"
+//  },
+//  {
+//    "key": "alt+left",
+//    "command": "workbench.action.terminal.focusPreviousPane",
+//    "when": "terminalFocus"
+//  }
+
+    // ============== Disable defaults: ============== //
+
+  { "key": "ctrl+r", "command": "-inlineChat.regenerate" },
+  { "key": "ctrl+r", "command": "-workbench.action.quickOpenNavigateNextInRecentFilesPicker" },
+  { "key": "ctrl+r", "command": "-workbench.action.terminal.chat.rerunRequest" },
+  { "key": "ctrl+r", "command": "-workbench.action.files.revealActiveFileInWindows" },
+  { "key": "ctrl+r", "command": "-workbench.action.quickOpenNavigatePreviousInRecentFilesPicker" }
+
+
+  { "key": "ctrl+r",
+    "command": "workbench.action.terminal.sendSequence",
+    "when": "terminalFocus",
+    "args": { "text": "\u0012" }  // sends raw Ctrl+R to the shell
+  }
+]
+
+
+
+
+
+]
